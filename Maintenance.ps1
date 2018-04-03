@@ -1,10 +1,8 @@
-WorkstationMaintenance.ps1
-$RebootRequired = $false
 
 function Main {
     $RebootRequired = DiskCleanUp
-    # Force reboot, remove to reboot only after a successful purge of Windows Update packages. 
-    $RebootRequired = $true
+    # Uncomment to force a reboot, otherwise, it only reboots after a successful purge of Windows Update packages.
+    # $RebootRequired = $true
 }
 
 function DiskCleanUp {
@@ -15,10 +13,12 @@ function DiskCleanUp {
     Write-Host 'Starting CleanMgr.exe'
     Start-Process -FilePath CleanMgr.exe -ArgumentList '/sagerun:1' -WindowStyle Hidden -Wait -Verbose
     Write-Host 'Waiting for CleanMgr and DismHost processes.'
-    Get-Process -Name cleanmgr,dismhost | Wait-Process
-    $status = Select-String -Path C:\Windows\Logs\CBS\DeepClean.log -Pattern 'Total size of superseded packages:'
-    $didCleanup = $status -ne $null
-    return $didCleanup
+    Get-Process -Name cleanmgr,dismhost -ErrorAction SilentlyContinue | Wait-Process
+    $successful = $false
+    if (Test-Path $env:SystemRoot\Logs\CBS\DeepClean.log) {
+        $successful = Select-String -Path $env:SystemRoot\Logs\CBS\DeepClean.log -Pattern 'Total size of superseded packages:' -Quiet
+    }
+    return $successful
 }
 
 function Reboot {
@@ -26,7 +26,10 @@ function Reboot {
     SHUTDOWN.EXE /r /f /t 0 /c 'Reboot initiated by Maintenance.ps1'
 }
 
-Start-Transcript -Path "$env:SystemRoot\Logs\Maintenance.ps1.log"
+$RebootRequired = $false
+$LogPath = $MyInvocation.MyCommand.Path + '.log'
+
+Start-Transcript -Path $LogPath
 . Main
 Stop-Transcript 
 
